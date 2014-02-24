@@ -8,6 +8,7 @@ var es = require('event-stream');
 var extend = require('xtend');
 var path = require('path');
 var spawn = require('child_process').spawn;
+var File = gutil.File;
 
 var server = require('karma').server;
 
@@ -15,6 +16,7 @@ var karmaPlugin = function(options) {
   var child;
   var stream;
   var files = [];
+  var buffer = [];
 
   options = extend({
     action: 'run'
@@ -67,7 +69,7 @@ var karmaPlugin = function(options) {
         JSON.stringify(options)
       ],
       {
-        stdio: 'inherit'
+        stdio: [process.stdin,null,process.stderr]
       }
     );
 
@@ -76,12 +78,23 @@ var karmaPlugin = function(options) {
       // gutil.log('Karma child process ended');
       done();
     });
+
+    child.stdout.on('data', function (data) {
+      var result = (c.stripColor(data.toString())).match(/TOTAL: \d+ SUCCESS/)
+      var intermediateResult = (c.stripColor(data.toString())).match(/(\d+) of (\d+) SUCCESS/)
+      process.stdout.write(data)
+      if(result){
+        stream.emit('data', buffer[0])
+      }
+      // if(intermediateResult && intermediateResult[1] == intermediateResult[2]){
+      //   stream.emit('data', buffer[0])
+      // }
+    });
   }
 
   function queueFile(file) {
     if (file) {
-      // gutil.log('Queueing file '+file.path);
-      files.push(file.path);
+      buffer.push(file)
     }
     else {
       stream.emit('error', new Error('Got undefined file'));
@@ -91,9 +104,9 @@ var karmaPlugin = function(options) {
   function endStream() {
     // Override files if they were piped
     // This doesn't work with the runner, but works fine with singleRun and autoWatch
-    if (files.length) {
-      options.files = files;
-    }
+    // if (files.length && overrideFiles) {
+    //   options.files = files;
+    // }
 
     // Start the server
     // If options.singleRun: Server starts, tests run, task completes
